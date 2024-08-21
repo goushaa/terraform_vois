@@ -98,11 +98,59 @@ resource "aws_security_group" "kady_sg" {
   }
 }
 
+resource "aws_iam_role" "kady_ec2_role" {
+  name = "kady-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "kady_ecr_policy" {
+  name = "kady-ecr-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:BatchCheckLayerAvailability"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "kady_ec2_policy_attach" {
+  role       = aws_iam_role.kady_ec2_role.name
+  policy_arn = aws_iam_policy.kady_ecr_policy.arn
+}
+
+
 resource "aws_instance" "kady_vm1" {
   ami           = "ami-04a81a99f5ec58529"
-  instance_type = "t2.micro"
+  instance_type = "t2.small"
   subnet_id     = aws_subnet.kady_public_subnet_1.id
   vpc_security_group_ids = [aws_security_group.kady_sg.id]
+  iam_instance_profile = aws_iam_instance_profile.kady_instance_profile.name
 
   tags = {
     Name = "kadyVM1"
@@ -111,7 +159,14 @@ resource "aws_instance" "kady_vm1" {
   user_data = <<-EOF
               #!/bin/bash
               apt-get update
-              apt-get install -y nginx docker.io docker-compose
+              apt-get install -y nginx docker.io docker-compose 
+              apt update
+              apt install unzip
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip awscliv2.zip
+              ./aws/install
+
+              
 
               # Ensure Docker is running
               systemctl start docker
@@ -122,9 +177,10 @@ resource "aws_instance" "kady_vm1" {
 
               # Add the ubuntu user to the Docker group
               usermod -aG docker ubuntu
+              newgrp docker
 
-              # Restart Docker to ensure group membership is applied
-              systemctl restart docker
+              # Login to ECR
+              aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 339713012203.dkr.ecr.us-east-1.amazonaws.com # Change account id
 
               # Start and enable Nginx
               systemctl start nginx
@@ -137,9 +193,10 @@ resource "aws_instance" "kady_vm1" {
 
 resource "aws_instance" "kady_vm2" {
   ami           = "ami-04a81a99f5ec58529"
-  instance_type = "t2.micro"
+  instance_type = "t2.small"
   subnet_id     = aws_subnet.kady_public_subnet_2.id
   vpc_security_group_ids = [aws_security_group.kady_sg.id]
+  iam_instance_profile = aws_iam_instance_profile.kady_instance_profile.name
 
   tags = {
     Name = "kadyVM2"
@@ -149,6 +206,11 @@ resource "aws_instance" "kady_vm2" {
               #!/bin/bash
               apt-get update
               apt-get install -y nginx docker.io docker-compose
+              apt update
+              apt install unzip
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip awscliv2.zip
+              ./aws/install
 
               # Ensure Docker is running
               systemctl start docker
@@ -159,9 +221,10 @@ resource "aws_instance" "kady_vm2" {
 
               # Add the ubuntu user to the Docker group
               usermod -aG docker ubuntu
+              newgrp docker
 
-              # Restart Docker to ensure group membership is applied
-              systemctl restart docker
+              # Login to ECR
+              aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 339713012203.dkr.ecr.us-east-1.amazonaws.com # Change account id
 
               # Start and enable Nginx
               systemctl start nginx
@@ -171,6 +234,12 @@ resource "aws_instance" "kady_vm2" {
               echo "<h1>Hello from Kady2</h1>" > /var/www/html/index.html
               EOF
 }
+
+resource "aws_iam_instance_profile" "kady_instance_profile" {
+  name = "kady-instance-profile"
+  role = aws_iam_role.kady_ec2_role.name
+}
+
 
 # Create a Load Balancer
 resource "aws_lb" "kady_alb" {
