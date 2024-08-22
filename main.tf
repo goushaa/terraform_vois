@@ -12,6 +12,8 @@ provider "aws" {
 #   }
 # }
 
+# VPC & SUBNETS & ROUTES
+
 resource "aws_vpc" "kady_vpc" {
   cidr_block = "172.74.0.0/16"
   tags = {
@@ -69,7 +71,7 @@ resource "aws_route_table_association" "kady_public_rt_assoc_2" {
   route_table_id = aws_route_table.kady_public_route.id
 }
 
-# Security Group 1 (kady-sg1) - Allows inbound traffic on ports 80, 22, and 8080
+# Security Groups & Role
 resource "aws_security_group" "kady_sg1" {
   vpc_id = aws_vpc.kady_vpc.id
 
@@ -106,7 +108,6 @@ resource "aws_security_group" "kady_sg1" {
   }
 }
 
-# Security Group 2 (kady-sg2) - Allows inbound traffic on ports 80, 22, and 3000
 resource "aws_security_group" "kady_sg2" {
   vpc_id = aws_vpc.kady_vpc.id
 
@@ -189,6 +190,7 @@ resource "aws_iam_role_policy_attachment" "kady_ec2_policy_attach" {
   policy_arn = aws_iam_policy.kady_ecr_policy.arn
 }
 
+# EC2 Instances
 
 resource "aws_instance" "kady_vm1" {
   ami           = "ami-04a81a99f5ec58529"
@@ -276,7 +278,7 @@ resource "aws_iam_instance_profile" "kady_instance_profile" {
 }
 
 
-# Create a Load Balancer
+# Load Balancer
 resource "aws_lb" "kady_alb" {
   name               = "kady-alb"
   internal           = false
@@ -294,7 +296,6 @@ resource "aws_lb" "kady_alb" {
   }
 }
 
-# Create a Target Group
 resource "aws_lb_target_group" "kady_target_group" {
   name     = "kady-target-group"
   port     = 80
@@ -314,7 +315,7 @@ resource "aws_lb_target_group" "kady_target_group" {
   }
 }
 
-# Create Target Group for port 8080
+
 resource "aws_lb_target_group" "kady_target_group_8080" {
   name     = "kady-target-group-8080"
   port     = 8080
@@ -334,7 +335,6 @@ resource "aws_lb_target_group" "kady_target_group_8080" {
   }
 }
 
-# Create Target Group for port 3000
 resource "aws_lb_target_group" "kady_target_group_3000" {
   name     = "kady-target-group-3000"
   port     = 3000
@@ -354,9 +354,6 @@ resource "aws_lb_target_group" "kady_target_group_3000" {
   }
 }
 
-
-
-# Create an ALB Listener
 resource "aws_lb_listener" "kady_listener" {
   load_balancer_arn = aws_lb.kady_alb.arn
   port              = 80
@@ -368,7 +365,6 @@ resource "aws_lb_listener" "kady_listener" {
   }
 }
 
-# Listener for port 8080
 resource "aws_lb_listener" "kady_listener_8080" {
   load_balancer_arn = aws_lb.kady_alb.arn
   port              = 8080
@@ -380,7 +376,6 @@ resource "aws_lb_listener" "kady_listener_8080" {
   }
 }
 
-# Listener for port 3000
 resource "aws_lb_listener" "kady_listener_3000" {
   load_balancer_arn = aws_lb.kady_alb.arn
   port              = 3000
@@ -419,6 +414,7 @@ resource "aws_lb_target_group_attachment" "kady_vm2_attachment" {
   port             = 80
 }
 
+#ECR Repos
 resource "aws_ecr_repository" "kady_jenkins" {
   name = "kady-jenkins"
 
