@@ -2,15 +2,15 @@ provider "aws" {
   region = "us-east-1"
 }
 
-terraform {
-  backend "s3" {
-    bucket         = "kady-tf-backend"     
-    key            = "terraform.tfstate"
-    region         = "us-east-1"               
-    dynamodb_table = "kady-tf-backend"        
-    encrypt        = true                      
-  }
-}
+# terraform {
+#   backend "s3" {
+#     bucket         = "kady-tf-backend"     
+#     key            = "terraform.tfstate"
+#     region         = "us-east-1"               
+#     dynamodb_table = "kady-tf-backend"        
+#     encrypt        = true                      
+#   }
+# }
 
 resource "aws_vpc" "kady_vpc" {
   cidr_block = "172.74.0.0/16"
@@ -69,7 +69,8 @@ resource "aws_route_table_association" "kady_public_rt_assoc_2" {
   route_table_id = aws_route_table.kady_public_route.id
 }
 
-resource "aws_security_group" "kady_sg" {
+# Security Group 1 (kady-sg1) - Allows inbound traffic on ports 80, 22, and 8080
+resource "aws_security_group" "kady_sg1" {
   vpc_id = aws_vpc.kady_vpc.id
 
   ingress {
@@ -86,6 +87,13 @@ resource "aws_security_group" "kady_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -94,7 +102,44 @@ resource "aws_security_group" "kady_sg" {
   }
 
   tags = {
-    Name = "kady-sg"
+    Name = "kady-sg1"
+  }
+}
+
+# Security Group 2 (kady-sg2) - Allows inbound traffic on ports 80, 22, and 3000
+resource "aws_security_group" "kady_sg2" {
+  vpc_id = aws_vpc.kady_vpc.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "kady-sg2"
   }
 }
 
@@ -147,9 +192,9 @@ resource "aws_iam_role_policy_attachment" "kady_ec2_policy_attach" {
 
 resource "aws_instance" "kady_vm1" {
   ami           = "ami-04a81a99f5ec58529"
-  instance_type = "t2.small"
+  instance_type = "t2.micro"
   subnet_id     = aws_subnet.kady_public_subnet_1.id
-  vpc_security_group_ids = [aws_security_group.kady_sg.id]
+  vpc_security_group_ids = [aws_security_group.kady_sg1.id]
   iam_instance_profile = aws_iam_instance_profile.kady_instance_profile.name
 
   tags = {
@@ -159,7 +204,7 @@ resource "aws_instance" "kady_vm1" {
   user_data = <<-EOF
               #!/bin/bash
               apt-get update
-              apt-get install -y nginx docker.io docker-compose 
+              apt-get install -y docker.io docker-compose 
               apt update
               apt install unzip
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -179,23 +224,18 @@ resource "aws_instance" "kady_vm1" {
               usermod -aG docker ubuntu
               newgrp docker
 
+              docker run -d -p 80:80 -e MESSAGE="Hello from kadyVM1" goushaa/kady-nginx
+
               # Login to ECR
-              aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 339713012203.dkr.ecr.us-east-1.amazonaws.com # Change account id
-
-              # Start and enable Nginx
-              systemctl start nginx
-              systemctl enable nginx
-
-              # Create a simple HTML page
-              echo "<h1>Hello from Kady1</h1>" > /var/www/html/index.html
+              aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 851725310572.dkr.ecr.us-east-1.amazonaws.com # Change account id
               EOF
 }
 
 resource "aws_instance" "kady_vm2" {
   ami           = "ami-04a81a99f5ec58529"
-  instance_type = "t2.small"
+  instance_type = "t2.micro"
   subnet_id     = aws_subnet.kady_public_subnet_2.id
-  vpc_security_group_ids = [aws_security_group.kady_sg.id]
+  vpc_security_group_ids = [aws_security_group.kady_sg2.id]
   iam_instance_profile = aws_iam_instance_profile.kady_instance_profile.name
 
   tags = {
@@ -205,7 +245,7 @@ resource "aws_instance" "kady_vm2" {
   user_data = <<-EOF
               #!/bin/bash
               apt-get update
-              apt-get install -y nginx docker.io docker-compose
+              apt-get install -y docker.io docker-compose
               apt update
               apt install unzip
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -223,15 +263,10 @@ resource "aws_instance" "kady_vm2" {
               usermod -aG docker ubuntu
               newgrp docker
 
-              # Login to ECR
-              aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 339713012203.dkr.ecr.us-east-1.amazonaws.com # Change account id
+              docker run -d -p 80:80 -e MESSAGE="Hello from kadyVM2" goushaa/kady-nginx
 
-              # Start and enable Nginx
-              systemctl start nginx
-              systemctl enable nginx
-              
-              # Create a simple HTML page
-              echo "<h1>Hello from Kady2</h1>" > /var/www/html/index.html
+              # Login to ECR
+              aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 851725310572.dkr.ecr.us-east-1.amazonaws.com # Change account id          
               EOF
 }
 
@@ -246,7 +281,7 @@ resource "aws_lb" "kady_alb" {
   name               = "kady-alb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.kady_sg.id]
+  security_groups    = [aws_security_group.kady_sg1.id, aws_security_group.kady_sg2.id]
   subnets            = [aws_subnet.kady_public_subnet_1.id, aws_subnet.kady_public_subnet_2.id]
 
   enable_deletion_protection = false
@@ -279,6 +314,48 @@ resource "aws_lb_target_group" "kady_target_group" {
   }
 }
 
+# Create Target Group for port 8080
+resource "aws_lb_target_group" "kady_target_group_8080" {
+  name     = "kady-target-group-8080"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.kady_vpc.id
+
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+
+  tags = {
+    Name = "kady-target-group-8080"
+  }
+}
+
+# Create Target Group for port 3000
+resource "aws_lb_target_group" "kady_target_group_3000" {
+  name     = "kady-target-group-3000"
+  port     = 3000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.kady_vpc.id
+
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+
+  tags = {
+    Name = "kady-target-group-3000"
+  }
+}
+
+
+
 # Create an ALB Listener
 resource "aws_lb_listener" "kady_listener" {
   load_balancer_arn = aws_lb.kady_alb.arn
@@ -289,6 +366,44 @@ resource "aws_lb_listener" "kady_listener" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.kady_target_group.arn
   }
+}
+
+# Listener for port 8080
+resource "aws_lb_listener" "kady_listener_8080" {
+  load_balancer_arn = aws_lb.kady_alb.arn
+  port              = 8080
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.kady_target_group_8080.arn
+  }
+}
+
+# Listener for port 3000
+resource "aws_lb_listener" "kady_listener_3000" {
+  load_balancer_arn = aws_lb.kady_alb.arn
+  port              = 3000
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.kady_target_group_3000.arn
+  }
+}
+
+# Register Targets with Target Group for port 8080
+resource "aws_lb_target_group_attachment" "kady_vm1_attachment_8080" {
+  target_group_arn = aws_lb_target_group.kady_target_group_8080.arn
+  target_id        = aws_instance.kady_vm1.id
+  port             = 8080
+}
+
+# Register Targets with Target Group for port 3000
+resource "aws_lb_target_group_attachment" "kady_vm2_attachment_3000" {
+  target_group_arn = aws_lb_target_group.kady_target_group_3000.arn
+  target_id        = aws_instance.kady_vm2.id
+  port             = 3000
 }
 
 # Register Targets with Target Group
@@ -304,10 +419,26 @@ resource "aws_lb_target_group_attachment" "kady_vm2_attachment" {
   port             = 80
 }
 
-resource "aws_ecr_repository" "kady_ecr" {
-  name = "kady-ecr"
+resource "aws_ecr_repository" "kady_jenkins" {
+  name = "kady-jenkins"
 
   tags = {
-    Name = "kady-ecr"
+    Name = "kady-jenkins"
+  }
+}
+
+resource "aws_ecr_repository" "kady_nginx" {
+  name = "kady-nodejs"
+
+  tags = {
+    Name = "kady-nodejs"
+  }
+}
+
+resource "aws_ecr_repository" "kady_mysql" {
+  name = "kady-mysql"
+
+  tags = {
+    Name = "kady-mysql"
   }
 }
