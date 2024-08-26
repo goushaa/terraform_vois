@@ -2,15 +2,15 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# terraform {
-#   backend "s3" {
-#     bucket         = "kady-tf-backend"     
-#     key            = "terraform.tfstate"
-#     region         = "us-east-1"               
-#     dynamodb_table = "kady-tf-backend"        
-#     encrypt        = true                      
-#   }
-# }
+terraform {
+  backend "s3" {
+    bucket         = "kady-tf-backend"     
+    key            = "terraform.tfstate"
+    region         = "us-east-1"               
+    dynamodb_table = "kady-tf-backend"        
+    encrypt        = true                      
+  }
+}
 
 # VPC & SUBNETS & ROUTES
 
